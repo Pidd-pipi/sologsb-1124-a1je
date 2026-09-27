@@ -188,6 +188,22 @@ const cancelPostmarks = computed<Postmark[]>(() =>
     .filter((pm): pm is Postmark => pm != null)
 )
 
+/** 合并痕迹：停用重复戳的原编号仍留在封详情，并标出并入的保留戳 */
+const cancelTraceViews = computed(() =>
+  (cover.value?.cancelTraces ?? []).map((trace) => {
+    const fromPm = postmarkStore.byId(trace.fromPmId)
+    const currentPm = postmarkStore.byId(trace.currentPmId)
+    return {
+      fromPmNo: trace.fromPmNo,
+      fromOffice: fromPm?.office ?? '',
+      currentPmNo: currentPm?.pmNo ?? `邮戳 #${trace.currentPmId}`,
+      currentOffice: currentPm?.office ?? '',
+      hadKeep: trace.hadKeep,
+      mergedAt: trace.mergedAt
+    }
+  })
+)
+
 function onTimelineSelect(node: TimelineNode): void {
   if (node.kind === 'transit') ElMessage.info(`中转节点：${node.office}（${node.mark}）`)
 }
@@ -330,6 +346,23 @@ function openRoute(): void {
             @select="showPostmark"
           />
         </div>
+
+        <div v-if="cancelTraceViews.length" class="cover-detail__traces">
+          <h3 class="cover-detail__traces-title">原编号销票痕迹（邮戳合并记录）</h3>
+          <ul class="cover-detail__trace-list">
+            <li v-for="(t, i) in cancelTraceViews" :key="`${t.fromPmNo}-${i}`">
+              <el-tag size="small" type="info" effect="dark">{{ t.fromPmNo }}</el-tag>
+              <span v-if="t.fromOffice" class="cover-detail__trace-office">{{ t.fromOffice }}</span>
+              <span class="cover-detail__trace-arrow">→ 并入</span>
+              <el-tag size="small" type="success" effect="plain">
+                {{ t.currentPmNo }}<template v-if="t.currentOffice"> {{ t.currentOffice }}</template>
+              </el-tag>
+              <span v-if="t.hadKeep" class="cover-detail__trace-note">本封原已挂保留戳，仅去重未新增</span>
+              <span v-else class="cover-detail__trace-note">已改挂保留戳</span>
+              <span v-if="t.mergedAt" class="cover-detail__trace-date">{{ t.mergedAt.slice(0, 10) }}</span>
+            </li>
+          </ul>
+        </div>
       </section>
     </template>
 
@@ -446,5 +479,45 @@ function openRoute(): void {
   max-width: 100%;
   border-radius: 8px;
   margin-bottom: 10px;
+}
+.cover-detail__traces {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gb-line);
+}
+.cover-detail__traces-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #5d3325;
+}
+.cover-detail__trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cover-detail__trace-list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--gb-muted);
+}
+.cover-detail__trace-office {
+  color: #5a4a37;
+}
+.cover-detail__trace-arrow {
+  color: #8c3b2e;
+}
+.cover-detail__trace-note {
+  font-size: 12px;
+  color: #8a7860;
+}
+.cover-detail__trace-date {
+  margin-left: auto;
+  font-size: 12px;
+  color: #a89578;
 }
 </style>

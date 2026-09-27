@@ -36,8 +36,8 @@ docker compose down
 
 | 模型 | 文件 | 说明 |
 | --- | --- | --- |
-| Postmark 邮戳 | `frontend/src/types/postmark.ts` | 编目号、戳型、局所、省份、使用年代、戳面日期、墨色、戳径、戳面文字、中英双文字、稀见度、戳样图、备注 |
-| Cover 实寄封 | `frontend/src/types/cover.ts` | 封号、寄出/收件地、寄出/到达日期、贴票构成、关联邮戳、邮路、中转地、给据、品相、来源、购入价、藏册页位 |
+| Postmark 邮戳 | `frontend/src/types/postmark.ts` | 编目号、戳型、局所、省份、使用年代、戳面日期、墨色、戳径、戳面文字、中英双文字、稀见度、戳样图、在用/停用状态、并入去向、备注 |
+| Cover 实寄封 | `frontend/src/types/cover.ts` | 封号、寄出/收件地、寄出/到达日期、贴票构成、关联邮戳、邮戳合并痕迹（原编号→保留戳）、邮路、中转地、给据、品相、来源、购入价、藏册页位 |
 | PostalRoute 邮路 | `frontend/src/types/route.ts` | 邮路号、名称、时期、运输方式、节点数组（局所/到达日期/中转戳）、全程天数、班期、备注 |
 | StamplessEntry 票戳组合 | `frontend/src/types/stampentry.ts` | 所属封、邮票名称、面值、发行年份、齿度、变体、封上位置 |
 
@@ -58,7 +58,7 @@ docker compose down
 
 - 组件：`frontend/src/components/common/` 下的 `StampCard.vue`、`CoverCard.vue`、`RouteTimeline.vue`、`ScarceTag.vue`
 - hooks：`frontend/src/hooks/useCatalogFilter.ts`（统一过滤与排序）、`frontend/src/hooks/useCoverRoute.ts`（寄递时间轴与在途天数）
-- utils：`frontend/src/utils/db.ts`（Dexie 封装/版本迁移/样例数据）、`frontend/src/utils/dateRange.ts`（年代区间、干支互转、日期先后校验）、`frontend/src/utils/id.ts`（编目号与唯一键）、`frontend/src/utils/draft.ts`（localStorage 草稿）
+- utils：`frontend/src/utils/db.ts`（Dexie 封装/版本迁移/样例数据）、`frontend/src/utils/dateRange.ts`（年代区间、干支互转、日期先后校验）、`frontend/src/utils/id.ts`（编目号与唯一键）、`frontend/src/utils/draft.ts`（localStorage 草稿）、`frontend/src/utils/postmarkMerge.ts`（邮戳合并/恢复，单事务原子操作）
 
 ## 六、本地开发（可选，需要本机 Node 20+）
 
@@ -99,6 +99,7 @@ sologsb-1124/
 
 ## 八、数据存储说明
 
-- **编目数据**：IndexedDB（Dexie，库名 `gbpostmark`）。表结构含版本号，`version(2)` 会把戳样与封图迁移到独立的 `assets` 表并补齐历史记录缺省字段；首次运行写入样例数据，便于直接查看各页面效果。
+- **编目数据**：IndexedDB（Dexie，库名 `gbpostmark`）。表结构含版本号，`version(2)` 会把戳样与封图迁移到独立的 `assets` 表并补齐历史记录缺省字段；`version(3)` 为邮戳增加在用/停用状态与并入去向、为实寄封增加邮戳合并痕迹；首次运行写入样例数据，便于直接查看各页面效果。
+- **邮戳合并**：两枚常被认成同一戳的邮戳可在邮戳目录执行合并——选定保留戳与重复戳后，重复戳关联的实寄封在**单个读写事务**内全部改挂保留戳，同一封已有关联时只摘重复登记、不重复登记；完成后重复戳停用，原编号仍留在目录与封详情并标出并入去向。登记新封只见在用邮戳；停用记录可一键恢复，封上的合并痕迹会逐封还原销票关系。事务内任一写入失败，邮戳与所有封都回到操作前状态。
 - **表单草稿**：localStorage，键名前缀 `gbpostmark:draft:`（邮戳、实寄封、邮路各一份），刷新或误关页面后可恢复，可一键清除。
 - **无后端**：不请求任何外部接口，容器无状态，不使用数据库服务与命名卷；清除浏览器站点数据即等于清空数据。

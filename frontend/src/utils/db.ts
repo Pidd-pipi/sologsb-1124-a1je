@@ -11,7 +11,7 @@ import type { AssetOwnerType, AssetSide, CatalogAsset } from '@/types/asset'
 
 export const DB_NAME = 'gbpostmark'
 /** 当前数据结构版本号，升级迁移写在下面对应的 version() 中 */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export class GbPostmarkDatabase extends Dexie {
   postmarks!: Table<Postmark, number>
@@ -73,6 +73,24 @@ export class GbPostmarkDatabase extends Dexie {
             if (typeof rt.totalDays !== 'number') rt.totalDays = 0
           })
       })
+
+    // v3：邮戳增加在用/停用与并入去向，实寄封增加合并痕迹（索引不变，仅补字段）
+    this.version(DB_VERSION).upgrade(async (tx) => {
+      await tx
+        .table('postmarks')
+        .toCollection()
+        .modify((pm: Partial<Postmark>) => {
+          if (pm.status !== 'active' && pm.status !== 'inactive') pm.status = 'active'
+          if (typeof pm.mergedIntoPmId !== 'number') pm.mergedIntoPmId = null
+          if (typeof pm.mergedAt !== 'string') pm.mergedAt = ''
+        })
+      await tx
+        .table('covers')
+        .toCollection()
+        .modify((cv: Partial<Cover>) => {
+          if (!Array.isArray(cv.cancelTraces)) cv.cancelTraces = []
+        })
+    })
   }
 }
 
@@ -142,7 +160,9 @@ function svgDataUrl(svg: string): string {
 }
 
 /** 依据戳面信息合成一张戳样图，用作样例数据的戳样。 */
-function postmarkSampleDataUrl(pm: Postmark): string {
+function postmarkSampleDataUrl(
+  pm: Pick<Postmark, 'inkColor' | 'diameter' | 'lettering' | 'office' | 'type' | 'yearFrom' | 'yearTo'>
+): string {
   const ink = INK_HEX[pm.inkColor] ?? '#2f2a26'
   const r = 46 + Math.min(18, Math.max(0, pm.diameter - 24))
   const svg = [
@@ -177,7 +197,13 @@ function coverThumbDataUrl(coverNo: string, from: string, to: string, date: stri
 const SEED_TS = '2024-05-01T09:00:00.000Z'
 
 function seedPostmarks(): Postmark[] {
-  const base = (pm: Postmark): Postmark => ({ ...pm, imageDataUrl: postmarkSampleDataUrl(pm) })
+  const base = (pm: Omit<Postmark, 'status' | 'mergedIntoPmId' | 'mergedAt'>): Postmark => ({
+    ...pm,
+    imageDataUrl: postmarkSampleDataUrl(pm),
+    status: 'active',
+    mergedIntoPmId: null,
+    mergedAt: ''
+  })
   return [
     base({
       id: 1,
@@ -370,6 +396,7 @@ function seedCovers(): Cover[] {
         { stampName: '蟠龙邮票', denomination: 1, count: 1 }
       ],
       cancelPmIds: [1],
+      cancelTraces: [],
       routeId: 1,
       viaPoints: ['苏州', '镇江'],
       registered: true,
@@ -392,6 +419,7 @@ function seedCovers(): Cover[] {
       arriveDate: '1921-03-10',
       franking: [{ stampName: '帆船邮票', denomination: 4, count: 2 }],
       cancelPmIds: [2],
+      cancelTraces: [],
       routeId: 2,
       viaPoints: ['济南', '徐州', '南京'],
       registered: false,
@@ -417,6 +445,7 @@ function seedCovers(): Cover[] {
         { stampName: '孙中山像邮票', denomination: 2, count: 2 }
       ],
       cancelPmIds: [3],
+      cancelTraces: [],
       routeId: 3,
       viaPoints: ['长沙', '汉口'],
       registered: true,
@@ -439,6 +468,7 @@ function seedCovers(): Cover[] {
       arriveDate: '',
       franking: [{ stampName: '普八邮票', denomination: 8, count: 1 }],
       cancelPmIds: [5],
+      cancelTraces: [],
       routeId: null,
       viaPoints: [],
       registered: false,

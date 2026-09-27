@@ -122,6 +122,12 @@ function resetAll(): void {
               <el-option v-for="t in POSTMARK_TYPES" :key="t" :label="t" :value="t" />
             </el-select>
           </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="pmFilter.filters.status" placeholder="全部" clearable style="width: 130px">
+              <el-option label="在用" value="active" />
+              <el-option label="已停用" value="inactive" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="排序">
             <el-select v-model="pmFilter.filters.sortKey" style="width: 140px">
               <el-option label="最近更新" value="recent" />

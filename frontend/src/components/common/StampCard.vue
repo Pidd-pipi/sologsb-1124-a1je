@@ -18,7 +18,11 @@ function onSelect(): void {
 </script>
 
 <template>
-  <article class="stamp-card" :class="{ 'is-active': active }" @click="onSelect">
+  <article
+    class="stamp-card"
+    :class="{ 'is-active': active, 'is-inactive': postmark.status === 'inactive' }"
+    @click="onSelect"
+  >
     <div class="stamp-card__figure">
       <img v-if="postmark.imageDataUrl" :src="postmark.imageDataUrl" :alt="`${postmark.pmNo} 戳样`" />
       <span v-else class="stamp-card__figure-empty">暂无戳样</span>
@@ -31,6 +35,7 @@ function onSelect(): void {
       <div class="stamp-card__tags">
         <el-tag size="small" effect="plain">{{ postmark.type }}</el-tag>
         <el-tag v-if="postmark.bilingual" size="small" type="success" effect="plain">中英双文</el-tag>
+        <el-tag v-if="postmark.status === 'inactive'" size="small" type="info" effect="dark">已停用</el-tag>
       </div>
       <p class="stamp-card__office">
         {{ postmark.office || '局所待考' }}
@@ -64,6 +69,13 @@ function onSelect(): void {
   border-color: #8c3b2e;
   box-shadow: 0 6px 18px rgba(140, 59, 46, 0.14);
   transform: translateY(-2px);
+}
+.stamp-card.is-inactive {
+  opacity: 0.72;
+  background: #f7f4ef;
+}
+.stamp-card.is-inactive .stamp-card__figure {
+  filter: grayscale(0.6);
 }
 .stamp-card__figure {
   flex: 0 0 96px;

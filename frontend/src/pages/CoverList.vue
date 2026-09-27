@@ -53,7 +53,12 @@ function openCreate(): void {
   frontImage.value = null
   backImage.value = null
   const draft = loadDraft<Cover>('cover')
-  if (draft) Object.assign(form, draft)
+  if (draft) {
+    Object.assign(form, draft)
+    // 合并后停用的邮戳不能再登记到新封，恢复草稿时剔除
+    const activeIds = new Set(postmarkStore.activeList.map((pm) => pm.id))
+    form.cancelPmIds = (draft.cancelPmIds ?? []).filter((id) => activeIds.has(id))
+  }
   dialogVisible.value = true
 }
 
@@ -109,8 +114,9 @@ function onBackChange(file: UploadFile): void {
   onImageChange('back', file)
 }
 
+// 登记新封时只见在用邮戳；停用记录不会出现在选择器中
 const postmarkOptions = computed(() =>
-  postmarkStore.list.flatMap((pm) =>
+  postmarkStore.activeList.flatMap((pm) =>
     typeof pm.id === 'number' ? [{ label: `${pm.pmNo} ${pm.office}`, value: pm.id }] : []
   )
 )

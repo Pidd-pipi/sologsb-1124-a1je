@@ -38,6 +38,7 @@ export const useCoverStore = defineStore('cover', () => {
       coverNo: input.coverNo || nextCoverNo(),
       franking: input.franking.map((f) => ({ ...f })),
       cancelPmIds: [...input.cancelPmIds],
+      cancelTraces: [],
       viaPoints: [...input.viaPoints],
       createdAt: now,
       updatedAt: now

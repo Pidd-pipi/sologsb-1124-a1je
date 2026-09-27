@@ -20,6 +20,8 @@ export interface CatalogFilters {
   era: string
   scarceLevel: string
   conditionGrade: string
+  /** 邮戳在用/停用筛选：'' 全部 / active / inactive */
+  status: string
   /** 是否给据邮件 */
   registered: '' | 'yes' | 'no'
   /** 运输方式 */
@@ -38,6 +40,7 @@ export function defaultFilters(): CatalogFilters {
     era: '',
     scarceLevel: '',
     conditionGrade: '',
+    status: '',
     registered: '',
     transport: '',
     sortKey: 'recent'
@@ -137,6 +140,11 @@ export function useCatalogFilter<T>(
         if (filters.type && textOf(row.type) !== filters.type) return false
         if (filters.province && textOf(row.province) !== filters.province) return false
         if (filters.scarceLevel && textOf(row.scarceLevel) !== filters.scarceLevel) return false
+        if (filters.status) {
+          const active = textOf(row.status) !== 'inactive'
+          if (filters.status === 'active' && !active) return false
+          if (filters.status === 'inactive' && active) return false
+        }
         if (office && !textOf(row.office).toLowerCase().includes(office)) return false
         if (!yearInRange(Number(row.yearFrom) || 0, range)) return false
       } else if (kind === 'cover') {

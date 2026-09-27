@@ -85,6 +85,7 @@ const fallbackTimeline = computed<TimelineNode[]>(() => {
       arriveDate: route.value.nodes[route.value.nodes.length - 1]?.arriveDate ?? '',
       franking: [],
       cancelPmIds: [],
+      cancelTraces: [],
       routeId: route.value.id ?? null,
       viaPoints: [],
       registered: false,

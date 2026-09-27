@@ -12,6 +12,9 @@ export type PostmarkType =
 /** 稀见度 */
 export type ScarceLevel = '常见' | '少见' | '罕见' | '孤品'
 
+/** 邮戳状态：在用可登记；停用（多为被合并的重复戳）保留记录但不再选用 */
+export type PostmarkStatus = 'active' | 'inactive'
+
 /** 戳面文字：按上格 / 中格 / 下格分行登记 */
 export interface PostmarkLettering {
   top: string
@@ -43,6 +46,12 @@ export interface Postmark {
   scarceLevel: ScarceLevel
   /** 戳样图（缩略 dataURL；原图存 assets 表） */
   imageDataUrl: string
+  /** 在用 / 停用（合并后重复戳置为停用，记录与编号仍保留） */
+  status: PostmarkStatus
+  /** 停用并入的保留戳 id；恢复使用时清空 */
+  mergedIntoPmId: number | null
+  /** 合并/停用时间 ISO 字符串 */
+  mergedAt: string
   note: string
   createdAt: string
   updatedAt: string
@@ -92,6 +101,9 @@ export function createEmptyPostmark(): Postmark {
     bilingual: false,
     scarceLevel: '常见',
     imageDataUrl: '',
+    status: 'active',
+    mergedIntoPmId: null,
+    mergedAt: '',
     note: '',
     createdAt: '',
     updatedAt: ''
