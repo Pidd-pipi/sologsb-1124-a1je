@@ -138,6 +138,7 @@ function resetAll(): void {
           v-for="pm in pmFilter.filtered.value"
           :key="pm.id"
           :postmark="pm"
+          :merge-target-label="postmarkStore.mergeTargetLabelOf(pm)"
           @select="showPostmark"
         />
       </div>
@@ -227,6 +228,14 @@ function resetAll(): void {
           <div><dt>省份</dt><dd>{{ activePostmark.province || '待考' }}</dd></div>
           <div><dt>使用年代</dt><dd>{{ activePostmark.yearFrom }}-{{ activePostmark.yearTo }}（{{ toGanzhi(activePostmark.yearFrom) }}）</dd></div>
           <div><dt>戳径/墨色</dt><dd>{{ activePostmark.diameter }}mm / {{ activePostmark.inkColor }}</dd></div>
+          <div>
+            <dt>状态</dt>
+            <dd>{{ activePostmark.status === 'merged' ? '已停用' : '在用' }}</dd>
+          </div>
+          <div v-if="activePostmark.status === 'merged'">
+            <dt>并入去向</dt>
+            <dd>{{ postmarkStore.mergeTargetLabelOf(activePostmark) || '—' }}</dd>
+          </div>
         </dl>
         <ScarceTag :level="activePostmark.scarceLevel" />
         <p class="search-view__note">{{ activePostmark.note || '暂无备注' }}</p>

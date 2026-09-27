@@ -19,6 +19,8 @@ export interface CatalogFilters {
   /** 年代区间，如 1950-1959 */
   era: string
   scarceLevel: string
+  /** 邮戳在用状态：active 在用 / merged 已并入停用，空串为全部 */
+  status: '' | 'active' | 'merged'
   conditionGrade: string
   /** 是否给据邮件 */
   registered: '' | 'yes' | 'no'
@@ -37,6 +39,7 @@ export function defaultFilters(): CatalogFilters {
     province: '',
     era: '',
     scarceLevel: '',
+    status: '',
     conditionGrade: '',
     registered: '',
     transport: '',
@@ -84,6 +87,7 @@ function keywordHaystack(kind: CatalogKind, row: AnyRow): string {
       textOf(lettering.middle),
       textOf(lettering.bottom),
       textOf(row.note),
+      textOf(row.status) === 'merged' ? '已停用 并入' : '在用',
       String(row.yearFrom ?? ''),
       String(row.yearTo ?? '')
     ].join(' ')
@@ -137,6 +141,7 @@ export function useCatalogFilter<T>(
         if (filters.type && textOf(row.type) !== filters.type) return false
         if (filters.province && textOf(row.province) !== filters.province) return false
         if (filters.scarceLevel && textOf(row.scarceLevel) !== filters.scarceLevel) return false
+        if (filters.status && (textOf(row.status) || 'active') !== filters.status) return false
         if (office && !textOf(row.office).toLowerCase().includes(office)) return false
         if (!yearInRange(Number(row.yearFrom) || 0, range)) return false
       } else if (kind === 'cover') {

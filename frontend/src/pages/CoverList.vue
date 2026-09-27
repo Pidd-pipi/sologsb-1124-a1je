@@ -109,8 +109,9 @@ function onBackChange(file: UploadFile): void {
   onImageChange('back', file)
 }
 
+/** 登记新封时只在用在用邮戳中选择，已停用并入的不再出现 */
 const postmarkOptions = computed(() =>
-  postmarkStore.list.flatMap((pm) =>
+  postmarkStore.activeList.flatMap((pm) =>
     typeof pm.id === 'number' ? [{ label: `${pm.pmNo} ${pm.office}`, value: pm.id }] : []
   )
 )
@@ -156,6 +157,12 @@ function openDetail(cover: Cover): void {
 }
 
 function pmLabel(id: number): string {
+  const pm = postmarkStore.byId(id)
+  if (!pm) return postmarkStore.labelOf(id)
+  if (pm.status === 'merged') {
+    const target = postmarkStore.mergeTargetLabelOf(pm)
+    return `${pm.pmNo} ${pm.office}（已停用${target ? `，并入 ${target}` : ''}）`
+  }
   return postmarkStore.labelOf(id)
 }
 

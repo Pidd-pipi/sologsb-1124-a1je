@@ -188,6 +188,13 @@ const cancelPostmarks = computed<Postmark[]>(() =>
     .filter((pm): pm is Postmark => pm != null)
 )
 
+/** 保留戳下标注已并入的停用戳编号，让原编号在封详情中仍可追溯 */
+function mergedSourcesLabel(pm: Postmark): string {
+  if (typeof pm.id !== 'number') return ''
+  const sources = postmarkStore.mergedSourcesOf(pm.id)
+  return sources.length ? `含已并入：${sources.map((s) => s.pmNo).join('、')}` : ''
+}
+
 function onTimelineSelect(node: TimelineNode): void {
   if (node.kind === 'transit') ElMessage.info(`中转节点：${node.office}（${node.mark}）`)
 }
@@ -323,12 +330,16 @@ function openRoute(): void {
         <h2 class="gb-panel__title">关联邮戳（{{ cancelPostmarks.length }} 枚）</h2>
         <p v-if="!cancelPostmarks.length" class="gb-empty">该封尚未关联销票邮戳。</p>
         <div v-else class="gb-grid">
-          <StampCard
-            v-for="pm in cancelPostmarks"
-            :key="pm.id"
-            :postmark="pm"
-            @select="showPostmark"
-          />
+          <div v-for="pm in cancelPostmarks" :key="pm.id" class="cover-detail__pm-item">
+            <StampCard
+              :postmark="pm"
+              :merge-target-label="postmarkStore.mergeTargetLabelOf(pm)"
+              @select="showPostmark"
+            />
+            <p v-if="mergedSourcesLabel(pm)" class="cover-detail__merged-sources">
+              {{ mergedSourcesLabel(pm) }}
+            </p>
+          </div>
         </div>
       </section>
     </template>
@@ -386,6 +397,14 @@ function openRoute(): void {
           <div><dt>使用年代</dt><dd>{{ activePostmark.yearFrom }}-{{ activePostmark.yearTo }}</dd></div>
           <div><dt>戳面日期</dt><dd>{{ activePostmark.dateOnStamp || '未注' }}</dd></div>
           <div><dt>戳径/墨色</dt><dd>{{ activePostmark.diameter }}mm / {{ activePostmark.inkColor }}</dd></div>
+          <div>
+            <dt>状态</dt>
+            <dd>{{ activePostmark.status === 'merged' ? '已停用' : '在用' }}</dd>
+          </div>
+          <div v-if="activePostmark.status === 'merged'">
+            <dt>并入去向</dt>
+            <dd>{{ postmarkStore.mergeTargetLabelOf(activePostmark) || '—' }}</dd>
+          </div>
         </dl>
         <ScarceTag :level="activePostmark.scarceLevel" />
       </div>
@@ -446,5 +465,16 @@ function openRoute(): void {
   max-width: 100%;
   border-radius: 8px;
   margin-bottom: 10px;
+}
+.cover-detail__pm-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cover-detail__merged-sources {
+  margin: 0;
+  font-size: 12px;
+  color: #8c5a2e;
 }
 </style>

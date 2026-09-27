@@ -6,8 +6,10 @@ const props = withDefaults(
   defineProps<{
     postmark: Postmark
     active?: boolean
+    /** 停用戳的并入去向短标签（如「PM-0001 上海邮政总局」），在用戳传空串 */
+    mergeTargetLabel?: string
   }>(),
-  { active: false }
+  { active: false, mergeTargetLabel: '' }
 )
 
 const emit = defineEmits<{ select: [postmark: Postmark] }>()
@@ -18,7 +20,11 @@ function onSelect(): void {
 </script>
 
 <template>
-  <article class="stamp-card" :class="{ 'is-active': active }" @click="onSelect">
+  <article
+    class="stamp-card"
+    :class="{ 'is-active': active, 'is-merged': postmark.status === 'merged' }"
+    @click="onSelect"
+  >
     <div class="stamp-card__figure">
       <img v-if="postmark.imageDataUrl" :src="postmark.imageDataUrl" :alt="`${postmark.pmNo} 戳样`" />
       <span v-else class="stamp-card__figure-empty">暂无戳样</span>
@@ -31,6 +37,9 @@ function onSelect(): void {
       <div class="stamp-card__tags">
         <el-tag size="small" effect="plain">{{ postmark.type }}</el-tag>
         <el-tag v-if="postmark.bilingual" size="small" type="success" effect="plain">中英双文</el-tag>
+        <el-tag v-if="postmark.status === 'merged'" size="small" type="info" effect="plain">
+          已停用
+        </el-tag>
       </div>
       <p class="stamp-card__office">
         {{ postmark.office || '局所待考' }}
@@ -44,6 +53,7 @@ function onSelect(): void {
         {{ postmark.lettering.top || '上格缺' }} / {{ postmark.lettering.middle || '中格缺' }} /
         {{ postmark.lettering.bottom || '下格缺' }}
       </p>
+      <p v-if="mergeTargetLabel" class="stamp-card__merged">已并入 {{ mergeTargetLabel }}</p>
     </div>
   </article>
 </template>
@@ -64,6 +74,10 @@ function onSelect(): void {
   border-color: #8c3b2e;
   box-shadow: 0 6px 18px rgba(140, 59, 46, 0.14);
   transform: translateY(-2px);
+}
+.stamp-card.is-merged {
+  opacity: 0.72;
+  background: #faf7f0;
 }
 .stamp-card__figure {
   flex: 0 0 96px;
@@ -119,6 +133,14 @@ function onSelect(): void {
   margin: 2px 0 0;
   font-size: 12px;
   color: #7c6a54;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stamp-card__merged {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #8c5a2e;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

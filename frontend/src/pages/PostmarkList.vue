@@ -5,6 +5,7 @@ import type { UploadFile } from 'element-plus'
 import StampCard from '@/components/common/StampCard.vue'
 import ScarceTag from '@/components/common/ScarceTag.vue'
 import { useCatalogFilter } from '@/hooks/useCatalogFilter'
+import { useCoverStore } from '@/stores/coverStore'
 import { usePostmarkStore, type ImagePayload } from '@/stores/postmarkStore'
 import type { Postmark } from '@/types/postmark'
 import {
@@ -18,6 +19,7 @@ import { clearDraft, draftSavedAt, loadDraft, saveDraft } from '@/utils/draft'
 import { nowIso, toNumber } from '@/utils/id'
 
 const store = usePostmarkStore()
+const coverStore = useCoverStore()
 const source = computed(() => store.list)
 const { filters, filtered, activeCount, reset } = useCatalogFilter<Postmark>('postmark', source)
 
@@ -31,8 +33,16 @@ const imagePayload = ref<ImagePayload | null>(null)
 const draftHint = ref('')
 const form = reactive<Postmark>(createEmptyPostmark())
 
+const mergeVisible = ref(false)
+const merging = ref(false)
+const mergeForm = reactive<{ keepId: number | null; duplicateId: number | null }>({
+  keepId: null,
+  duplicateId: null
+})
+
 onMounted(async () => {
   if (!store.loaded) await store.load()
+  if (!coverStore.loaded) await coverStore.load()
   draftHint.value = draftSavedAt('postmark')
 })
 
@@ -108,6 +118,74 @@ function showDetail(pm: Postmark): void {
   detailVisible.value = true
 }
 
+/** 合并对话框的候选戳：只有在用戳可选，重复戳需排除保留戳 */
+const keepOptions = computed(() =>
+  store.activeList.flatMap((pm) =>
+    typeof pm.id === 'number' ? [{ label: `${pm.pmNo} ${pm.office}`, value: pm.id }] : []
+  )
+)
+const duplicateOptions = computed(() =>
+  keepOptions.value.filter((opt) => opt.value !== mergeForm.keepId)
+)
+
+watch(
+  () => mergeForm.keepId,
+  (keepId) => {
+    if (keepId != null && keepId === mergeForm.duplicateId) mergeForm.duplicateId = null
+  }
+)
+
+/** 合并预览：重复戳关联的封数，以及其中本已挂保留戳、无需重复登记的封数 */
+const mergePreview = computed(() => {
+  const { keepId, duplicateId } = mergeForm
+  if (keepId == null || duplicateId == null) return null
+  const affected = coverStore.list.filter((c) => c.cancelPmIds.includes(duplicateId))
+  const skipped = affected.filter((c) => c.cancelPmIds.includes(keepId)).length
+  return { total: affected.length, moved: affected.length - skipped, skipped }
+})
+
+function openMerge(prefillDuplicateId?: number): void {
+  mergeForm.keepId = null
+  mergeForm.duplicateId = prefillDuplicateId ?? null
+  mergeVisible.value = true
+}
+
+async function submitMerge(): Promise<void> {
+  const { keepId, duplicateId } = mergeForm
+  if (keepId == null || duplicateId == null) {
+    ElMessage.warning('请先选择保留戳与重复戳')
+    return
+  }
+  if (keepId === duplicateId) {
+    ElMessage.warning('保留戳与重复戳不能是同一枚')
+    return
+  }
+  merging.value = true
+  try {
+    const result = await store.mergePostmarks(keepId, duplicateId)
+    await coverStore.load()
+    if (current.value?.id === duplicateId) current.value = store.byId(duplicateId)
+    mergeVisible.value = false
+    ElMessage.success(
+      `已并入 ${store.labelOf(duplicateId)}：改挂 ${result.moved} 封` +
+        (result.skipped ? `，${result.skipped} 封本已挂保留戳未重复登记` : '')
+    )
+  } catch (err) {
+    const reason = err instanceof Error && err.message ? `：${err.message}` : ''
+    ElMessage.error(`合并失败${reason}，邮戳与全部实寄封已保持合并前状态`)
+  } finally {
+    merging.value = false
+  }
+}
+
+async function restoreCurrent(): Promise<void> {
+  const pm = current.value
+  if (!pm || typeof pm.id !== 'number') return
+  await store.restore(pm.id)
+  current.value = store.byId(pm.id)
+  ElMessage.success(`已恢复 ${pm.pmNo} 为在用`)
+}
+
 function buildSampleText(pm: Postmark): string {
   return [
     `戳样条目 ${pm.pmNo}`,
@@ -144,7 +222,8 @@ async function copySample(): Promise<void> {
       <div>
         <h1 class="gb-page__title">邮戳目录</h1>
         <p class="gb-page__subtitle">
-          共 {{ store.total }} 枚邮戳，其中罕见以上 {{ store.scarceCount }} 枚；按戳型、局所、年代区间检索。
+          共 {{ store.total }} 枚邮戳，其中罕见以上 {{ store.scarceCount }} 枚、已停用
+          {{ store.mergedList.length }} 枚；按戳型、局所、年代区间检索。
         </p>
       </div>
       <div class="postmark-page__actions">
@@ -152,6 +231,7 @@ async function copySample(): Promise<void> {
           <el-radio-button value="wall">图片墙</el-radio-button>
           <el-radio-button value="list">列表</el-radio-button>
         </el-radio-group>
+        <el-button @click="openMerge()">合并邮戳</el-button>
         <el-button type="primary" @click="openCreate">新增邮戳</el-button>
       </div>
     </header>
@@ -183,6 +263,12 @@ async function copySample(): Promise<void> {
             <el-option v-for="s in SCARCE_LEVELS" :key="s" :label="s" :value="s" />
           </el-select>
         </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="filters.status" placeholder="全部" clearable style="width: 120px">
+            <el-option label="在用" value="active" />
+            <el-option label="已停用" value="merged" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="排序">
           <el-select v-model="filters.sortKey" style="width: 150px">
             <el-option label="最近更新" value="recent" />
@@ -205,6 +291,7 @@ async function copySample(): Promise<void> {
         :key="pm.id"
         :postmark="pm"
         :active="current?.id === pm.id"
+        :merge-target-label="store.mergeTargetLabelOf(pm)"
         @select="showDetail"
       />
     </div>
@@ -225,6 +312,14 @@ async function copySample(): Promise<void> {
       <el-table-column label="稀见度" width="100">
         <template #default="{ row }">
           <ScarceTag :level="row.scarceLevel" />
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" min-width="150">
+        <template #default="{ row }">
+          <el-tag v-if="row.status === 'merged'" size="small" type="info" effect="plain">
+            已并入 {{ store.mergeTargetLabelOf(row) || '他戳' }}
+          </el-tag>
+          <el-tag v-else size="small" type="success" effect="plain">在用</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="190">
@@ -374,9 +469,39 @@ async function copySample(): Promise<void> {
           <div><dt>墨色</dt><dd>{{ current.inkColor }}</dd></div>
           <div><dt>戳面文字</dt><dd>{{ current.lettering.top }} / {{ current.lettering.middle }} / {{ current.lettering.bottom }}</dd></div>
           <div><dt>文字</dt><dd>{{ current.bilingual ? '中英双文字' : '单文字' }}</dd></div>
+          <div>
+            <dt>状态</dt>
+            <dd>{{ current.status === 'merged' ? '已停用' : '在用' }}</dd>
+          </div>
+          <div v-if="current.status === 'merged'">
+            <dt>并入去向</dt>
+            <dd>{{ store.mergeTargetLabelOf(current) || '—' }}</dd>
+          </div>
+          <div v-if="current.status === 'merged' && current.mergedAt">
+            <dt>停用时间</dt>
+            <dd>{{ current.mergedAt.slice(0, 10) }}</dd>
+          </div>
         </dl>
         <p class="postmark-page__note">{{ current.note || '暂无备注' }}</p>
-        <el-button type="primary" plain @click="generateSample(current)">生成戳样条目</el-button>
+        <div class="postmark-page__detail-actions">
+          <el-button type="primary" plain @click="generateSample(current)">生成戳样条目</el-button>
+          <el-button
+            v-if="current.status === 'merged'"
+            type="warning"
+            plain
+            @click="restoreCurrent"
+          >
+            恢复在用
+          </el-button>
+          <el-button
+            v-else-if="typeof current.id === 'number'"
+            type="danger"
+            plain
+            @click="openMerge(current.id)"
+          >
+            并入其他戳…
+          </el-button>
+        </div>
       </div>
     </el-drawer>
 
@@ -385,6 +510,58 @@ async function copySample(): Promise<void> {
       <template #footer>
         <el-button @click="sampleVisible = false">关闭</el-button>
         <el-button type="primary" @click="copySample">复制条目</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="mergeVisible" title="合并重复邮戳" width="560px">
+      <el-form label-width="96px">
+        <el-form-item label="保留戳">
+          <el-select v-model="mergeForm.keepId" placeholder="合并后继续使用的邮戳" style="width: 100%">
+            <el-option
+              v-for="opt in keepOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="重复戳">
+          <el-select
+            v-model="mergeForm.duplicateId"
+            placeholder="将被停用并入的邮戳"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="opt in duplicateOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <el-alert v-if="mergePreview" type="warning" :closable="false" show-icon>
+        <p class="postmark-page__merge-line">
+          重复戳关联 {{ mergePreview.total }} 个实寄封：{{ mergePreview.moved }} 封将改挂保留戳<template
+            v-if="mergePreview.skipped"
+          >，{{ mergePreview.skipped }} 封本已挂保留戳，不再重复登记</template>。
+        </p>
+        <p class="postmark-page__merge-line">
+          合并后重复戳停用，编号保留在目录与封详情中并标注并入去向，可随时恢复；任一写入失败将整体回滚。
+        </p>
+      </el-alert>
+      <el-alert
+        v-else
+        type="info"
+        :closable="false"
+        show-icon
+        title="选择保留戳与重复戳后，这里会预览受影响的实寄封。"
+      />
+      <template #footer>
+        <el-button @click="mergeVisible = false">取消</el-button>
+        <el-button type="danger" :loading="merging" :disabled="!mergePreview" @click="submitMerge">
+          确认合并
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -420,5 +597,17 @@ async function copySample(): Promise<void> {
   font-size: 13px;
   color: var(--gb-muted);
   line-height: 1.6;
+}
+.postmark-page__detail-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.postmark-page__merge-line {
+  margin: 0 0 4px;
+  line-height: 1.6;
+}
+.postmark-page__merge-line:last-child {
+  margin-bottom: 0;
 }
 </style>

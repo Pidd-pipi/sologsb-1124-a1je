@@ -11,7 +11,7 @@ import type { AssetOwnerType, AssetSide, CatalogAsset } from '@/types/asset'
 
 export const DB_NAME = 'gbpostmark'
 /** 当前数据结构版本号，升级迁移写在下面对应的 version() 中 */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export class GbPostmarkDatabase extends Dexie {
   postmarks!: Table<Postmark, number>
@@ -71,6 +71,23 @@ export class GbPostmarkDatabase extends Dexie {
           .modify((rt: Partial<PostalRoute>) => {
             if (!Array.isArray(rt.nodes)) rt.nodes = []
             if (typeof rt.totalDays !== 'number') rt.totalDays = 0
+          })
+      })
+
+    // v3：邮戳支持「并入他戳而停用」，补齐状态与并入去向字段（升级迁移）
+    this.version(DB_VERSION)
+      .stores({
+        postmarks:
+          '++id, pmNo, type, office, province, yearFrom, yearTo, scarceLevel, inkColor, bilingual, status'
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('postmarks')
+          .toCollection()
+          .modify((pm: Partial<Postmark>) => {
+            if (pm.status !== 'merged') pm.status = 'active'
+            if (typeof pm.mergedIntoId !== 'number') pm.mergedIntoId = null
+            if (typeof pm.mergedAt !== 'string') pm.mergedAt = ''
           })
       })
   }
@@ -178,6 +195,8 @@ const SEED_TS = '2024-05-01T09:00:00.000Z'
 
 function seedPostmarks(): Postmark[] {
   const base = (pm: Postmark): Postmark => ({ ...pm, imageDataUrl: postmarkSampleDataUrl(pm) })
+  /** 在用戳共用的状态字段 */
+  const ACTIVE = { status: 'active' as const, mergedIntoId: null, mergedAt: '' }
   return [
     base({
       id: 1,
@@ -193,6 +212,7 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '上海', middle: 'SHANGHAI', bottom: '18 JUN 10' },
       bilingual: true,
       scarceLevel: '少见',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '三格圆形日戳，中英文并用，戳面清晰，边线完整。',
       createdAt: SEED_TS,
@@ -212,6 +232,7 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '天津', middle: 'TIENTSIN', bottom: '21 MAR 5' },
       bilingual: true,
       scarceLevel: '罕见',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '滚筒戳戳面横长，销票时墨色偏淡，此枚墨色饱满。',
       createdAt: SEED_TS,
@@ -231,6 +252,7 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '广州', middle: 'CANTON', bottom: '波纹销票' },
       bilingual: true,
       scarceLevel: '常见',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '机盖波纹戳，波纹段共六线，用于快速销票。',
       createdAt: SEED_TS,
@@ -250,6 +272,7 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '国庆纪念', middle: '南京', bottom: '1947.10.10' },
       bilingual: false,
       scarceLevel: '少见',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '纪念戳仅在纪念日启用，戳径大于同期日戳。',
       createdAt: SEED_TS,
@@ -269,6 +292,7 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '杭州', middle: '西湖', bottom: '1958.4.2' },
       bilingual: false,
       scarceLevel: '常见',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '风景戳以西湖三潭印月为主图，供集邮者加盖。',
       createdAt: SEED_TS,
@@ -288,8 +312,31 @@ function seedPostmarks(): Postmark[] {
       lettering: { top: '军邮', middle: '231', bottom: '1943.7.21' },
       bilingual: false,
       scarceLevel: '孤品',
+      ...ACTIVE,
       imageDataUrl: '',
       note: '军邮局编号戳，抗战时期随军邮站流转，存世极少。',
+      createdAt: SEED_TS,
+      updatedAt: SEED_TS
+    }),
+    base({
+      id: 7,
+      pmNo: 'PM-0007',
+      type: '圆形日戳',
+      office: '上海邮政总局',
+      province: '上海',
+      yearFrom: 1908,
+      yearTo: 1912,
+      dateOnStamp: '1910-06-18',
+      inkColor: '黑',
+      diameter: 26,
+      lettering: { top: '上海', middle: 'SHANGHAI', bottom: '18 JUN 10' },
+      bilingual: true,
+      scarceLevel: '常见',
+      status: 'merged',
+      mergedIntoId: 1,
+      mergedAt: SEED_TS,
+      imageDataUrl: '',
+      note: '与 PM-0001 同式同局同日期，整理时判为重录，已并入 PM-0001 停用；编号保留备查。',
       createdAt: SEED_TS,
       updatedAt: SEED_TS
     })
